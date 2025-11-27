@@ -184,6 +184,16 @@
             font-size: 14px;
             color: #1565c0;
         }
+
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #856404;
+        }
     </style>
 </head>
 <body>
@@ -194,8 +204,8 @@
         </div>
 
         <div class="config-section">
-            <div class="info-box">
-                <strong>⚠️ Security Note:</strong> Your Canvas token is stored only in your browser and never sent to any server except Canvas.
+            <div class="warning-box">
+                <strong>🔧 Setup Required:</strong> To use this app, you need to set up a serverless function. See instructions below.
             </div>
             
             <div class="input-group">
@@ -229,11 +239,9 @@
             const coursesContainer = document.getElementById('coursesContainer');
             const loadBtn = document.getElementById('loadBtn');
 
-            // Clear previous results
             coursesContainer.innerHTML = '';
             errorDiv.style.display = 'none';
             
-            // Validation
             if (!token) {
                 errorDiv.textContent = 'Please enter your Canvas access token';
                 errorDiv.style.display = 'block';
@@ -246,32 +254,42 @@
                 return;
             }
 
-            // Show loading
             loadingDiv.style.display = 'block';
             loadBtn.disabled = true;
 
             try {
-                // Fetch courses
-                const coursesResponse = await fetch(`https://${domain}/api/v1/courses?enrollment_state=active&per_page=100`, {
+                // Use the serverless function as a proxy
+                const coursesResponse = await fetch('/api/canvas-proxy', {
+                    method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        token: token,
+                        domain: domain,
+                        endpoint: '/api/v1/courses?enrollment_state=active&per_page=100'
+                    })
                 });
 
                 if (!coursesResponse.ok) {
-                    throw new Error(`Failed to fetch courses: ${coursesResponse.status} ${coursesResponse.statusText}`);
+                    throw new Error(`Failed to fetch courses: ${coursesResponse.status}`);
                 }
 
                 const courses = await coursesResponse.json();
 
-                // Fetch assignments for each course
                 for (const course of courses) {
                     if (!course.name) continue;
 
-                    const assignmentsResponse = await fetch(`https://${domain}/api/v1/courses/${course.id}/assignments?per_page=100`, {
+                    const assignmentsResponse = await fetch('/api/canvas-proxy', {
+                        method: 'POST',
                         headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            token: token,
+                            domain: domain,
+                            endpoint: `/api/v1/courses/${course.id}/assignments?per_page=100`
+                        })
                     });
 
                     if (assignmentsResponse.ok) {
@@ -285,7 +303,7 @@
                 }
 
             } catch (error) {
-                errorDiv.textContent = `Error: ${error.message}. Please check your token and domain.`;
+                errorDiv.textContent = `Error: ${error.message}. Make sure the serverless function is set up correctly.`;
                 errorDiv.style.display = 'block';
                 console.error('Error:', error);
             } finally {
@@ -350,7 +368,6 @@
             coursesContainer.appendChild(courseCard);
         }
 
-        // Save token to localStorage for convenience (optional)
         document.getElementById('canvasToken').addEventListener('change', (e) => {
             localStorage.setItem('canvasToken', e.target.value);
         });
@@ -359,7 +376,6 @@
             localStorage.setItem('canvasDomain', e.target.value);
         });
 
-        // Load saved values on page load
         window.addEventListener('DOMContentLoaded', () => {
             const savedToken = localStorage.getItem('canvasToken');
             const savedDomain = localStorage.getItem('canvasDomain');
